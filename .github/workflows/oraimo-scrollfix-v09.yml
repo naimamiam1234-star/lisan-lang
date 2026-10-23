@@ -1,0 +1,69 @@
+name: OpenWatch v0.9 Scroll Fix Android APK
+on:
+  push:
+    branches:
+      - build-openwatch-scrollfix-v09-20261023
+    paths:
+      - '.github/workflows/oraimo-scrollfix-v09.yml'
+      - 'oraimo-build/v09part*.b64'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Restore Android source
+        run: |
+          mkdir -p "${{ runner.temp }}/OraimoOpenWatch"
+          cat oraimo-build/v09part{1,2,3,4,5,6,7,8}.b64 | tr -d '\n' | base64 -d > "${{ runner.temp }}/src.zip"
+          unzip -q "${{ runner.temp }}/src.zip" -d "${{ runner.temp }}/OraimoOpenWatch"
+          test -f "${{ runner.temp }}/OraimoOpenWatch/app/src/main/java/org/openwatch/oraimo/ScrollRefreshGuard.java"
+      - name: JDK17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Pure Java regression tests
+        working-directory: ${{ runner.temp }}/OraimoOpenWatch
+        run: bash scripts/run_unit_tests.sh && python scripts/verify_project.py
+      - name: Android tools
+        run: |
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n1 || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            curl -fLsS --retry 3 -o "$RUNNER_TEMP/tools.zip" "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+            mkdir -p "$ANDROID_HOME/cmdline-tools/latest"
+            unzip -q "$RUNNER_TEMP/tools.zip" -d "$RUNNER_TEMP/androidtools"
+            mv "$RUNNER_TEMP/androidtools/cmdline-tools/"* "$ANDROID_HOME/cmdline-tools/latest/"
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          "$SDKMANAGER" --version
+      - name: Install Android platform
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+      - name: Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Build APK
+        working-directory: ${{ runner.temp }}/OraimoOpenWatch
+        run: gradle --no-daemon :app:assembleDebug
+      - name: Validate generated APK
+        run: |
+          file="${{ runner.temp }}/OraimoOpenWatch/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$file"
+          unzip -t "$file" | tail -2
+          ls -lh "$file"
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: OraimoOpenWatch-v0.9-ScrollFix-debug-APK
+          path: ${{ runner.temp }}/OraimoOpenWatch/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
