@@ -1,0 +1,70 @@
+name: OpenWatch v0.10 Steps Alarms Android APK
+on:
+  push:
+    branches:
+      - build-openwatch-live-steps-alarms-v010-20261023
+    paths:
+      - '.github/workflows/oraimo-activity-v010.yml'
+      - 'oraimo-build/v010part*.b64'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+      - name: Restore OpenWatch source
+        run: |
+          mkdir -p "${{ runner.temp }}/OpenWatch"
+          cat oraimo-build/v010part{1,2,3,4,5,6,7,8,9,10}.b64 | tr -d '\n' | base64 -d > "${{ runner.temp }}/source.zip"
+          unzip -q "${{ runner.temp }}/source.zip" -d "${{ runner.temp }}/OpenWatch"
+          test -f "${{ runner.temp }}/OpenWatch/app/src/main/java/org/openwatch/oraimo/AlarmProtocol.java"
+          test -f "${{ runner.temp }}/OpenWatch/app/src/main/java/org/openwatch/oraimo/ActivityMetrics.java"
+      - name: Install Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Protocol, alarm and activity tests
+        working-directory: ${{ runner.temp }}/OpenWatch
+        run: bash scripts/run_unit_tests.sh && python scripts/verify_project.py
+      - name: Install Android command line tools
+        run: |
+          mkdir -p "$ANDROID_HOME/cmdline-tools"
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1 || true)"
+          if [ -z "$SDKMANAGER" ]; then
+            curl -fLsS --retry 3 -o "$RUNNER_TEMP/android-tools.zip" "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+            mkdir -p "$ANDROID_HOME/cmdline-tools/latest"
+            unzip -q "$RUNNER_TEMP/android-tools.zip" -d "$RUNNER_TEMP/android-tools"
+            mv "$RUNNER_TEMP/android-tools/cmdline-tools/"* "$ANDROID_HOME/cmdline-tools/latest/"
+            SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          echo "$(dirname "$SDKMANAGER")" >> "$GITHUB_PATH"
+          "$SDKMANAGER" --version
+      - name: Install SDK 35
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+      - name: Configure Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Compile debug APK
+        working-directory: ${{ runner.temp }}/OpenWatch
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+      - name: Validate APK archive
+        run: |
+          APK="${{ runner.temp }}/OpenWatch/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          unzip -t "$APK" | tail -2
+          ls -lh "$APK"
+      - name: Publish build
+        uses: actions/upload-artifact@v4
+        with:
+          name: OraimoOpenWatch-v0.10-LiveSteps-Alarms-debug-APK
+          path: ${{ runner.temp }}/OpenWatch/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
