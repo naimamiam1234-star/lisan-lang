@@ -1,0 +1,54 @@
+name: Oraimo OpenWatch Android APK
+on:
+  push:
+    branches:
+      - build-oraimo-openwatch-20261023
+    paths:
+      - .github/workflows/oraimo-build.yml
+      - oraimo-build/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout build branch
+        uses: actions/checkout@v4
+      - name: Restore Android project
+        run: |
+          mkdir -p ${{ runner.temp }}/OraimoOpenWatch
+          cat oraimo-build/part{1,2,3,4}.b64 | tr -d '\n' | base64 -d > ${{ runner.temp }}/openwatch-src.zip
+          unzip -q ${{ runner.temp }}/openwatch-src.zip -d ${{ runner.temp }}/OraimoOpenWatch
+          test -f ${{ runner.temp }}/OraimoOpenWatch/app/src/main/AndroidManifest.xml
+      - name: Configure JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Configure Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install SDK platform
+        run: sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+      - name: Configure Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+      - name: Compile debug APK
+        working-directory: ${{ runner.temp }}/OraimoOpenWatch
+        run: gradle --no-daemon --stacktrace :app:assembleDebug
+      - name: Verify output
+        run: |
+          APK="${{ runner.temp }}/OraimoOpenWatch/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          ls -lh "$APK"
+      - name: Publish APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: OraimoOpenWatch-v0.2-Android16-debug-APK
+          path: ${{ runner.temp }}/OraimoOpenWatch/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14
