@@ -21,10 +21,10 @@ jobs:
       - name: Restore Android project
         run: |
           mkdir -p ${{ runner.temp }}/OraimoOpenWatch
-          cat oraimo-build/part{1,2,3,4}.b64 | tr -d '\n' | base64 -d > ${{ runner.temp }}/openwatch-src.zip
+          cat oraimo-build/v03part{1,2,3,4,5,6}.b64 | tr -d '\n' | base64 -d > ${{ runner.temp }}/openwatch-src.zip
           unzip -q ${{ runner.temp }}/openwatch-src.zip -d ${{ runner.temp }}/OraimoOpenWatch
           test -f ${{ runner.temp }}/OraimoOpenWatch/app/src/main/AndroidManifest.xml
-          sed -i 's/shortUuid(uuid)/uuid.toString()/g' "${{ runner.temp }}/OraimoOpenWatch/app/src/main/java/org/openwatch/oraimo/BleController.java"
+          echo 'v0.3 includes corrected UUID formatter'
       - name: Configure JDK
         uses: actions/setup-java@v4
         with:
@@ -60,7 +60,7 @@ jobs:
       - name: Publish APK
         uses: actions/upload-artifact@v4
         with:
-          name: OraimoOpenWatch-v0.2-Android16-debug-APK
+          name: OraimoOpenWatch-v0.3-Android16-debug-APK
           path: ${{ runner.temp }}/OraimoOpenWatch/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
           retention-days: 14
