@@ -24,6 +24,7 @@ jobs:
           cat oraimo-build/part{1,2,3,4}.b64 | tr -d '\n' | base64 -d > ${{ runner.temp }}/openwatch-src.zip
           unzip -q ${{ runner.temp }}/openwatch-src.zip -d ${{ runner.temp }}/OraimoOpenWatch
           test -f ${{ runner.temp }}/OraimoOpenWatch/app/src/main/AndroidManifest.xml
+          sed -i 's/shortUuid(uuid)/uuid.toString()/g' "${{ runner.temp }}/OraimoOpenWatch/app/src/main/java/org/openwatch/oraimo/BleController.java"
       - name: Configure JDK
         uses: actions/setup-java@v4
         with:
